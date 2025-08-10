@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animated Browser</title>
+    <!-- Use Tailwind CSS for a clean, modern look -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome for the security icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <style>
+        /* Hide the browser's scrollbars */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #f3f4f6; /* Lighter background */
+        }
+        .dark body {
+            background-color: #111827; /* Darker background */
+        }
+        /* Style for the history panel */
+        .history-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 80%;
+            max-width: 300px;
+            height: 100%;
+            transform: translateX(-100%);
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Bouncy animation */
+            z-index: 20;
+        }
+        .history-panel.open {
+            transform: translateX(0);
+        }
+        .backdrop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 15;
+            display: none;
+            transition: opacity 0.5s ease-in-out;
+            opacity: 0;
+        }
+        .backdrop.open {
+            display: block;
+            opacity: 1;
+        }
+        /* Keyframe animation for the security warning */
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .animate-fade-in-down {
+            animation: fadeInDown 0.5s ease-out;
+        }
+        /* Style for the blocking modal */
+        .security-modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 30; /* Higher than the history panel */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            text-align: center;
+            padding: 2rem;
+            color: white;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .security-modal.open {
+            opacity: 1;
+            visibility: visible;
+        }
+    </style>
+</head>
+<body class="bg-indigo-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <!-- History Panel and Backdrop -->
+    <div id="history-panel" class="history-panel p-4 bg-white dark:bg-gray-800 shadow-xl rounded-r-2xl">
+        <h2 class="text-2xl font-bold mb-4 text-indigo-700 dark:text-indigo-300 animate-pulse">History 📚</h2>
+        <ul id="history-list" class="space-y-2 text-sm overflow-y-auto max-h-[85%]">
+            <!-- History items will be inserted here by JavaScript -->
+        </ul>
+        <button id="close-history-btn" class="mt-4 w-full py-2 px-4 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold rounded-full shadow-lg transition-all duration-300 transform hover:scale-105">
+            Close History
+        </button>
+    </div>
+    <div id="backdrop" class="backdrop"></div>
+
+    <!-- Header with URL bar and navigation buttons -->
+    <div class="flex-shrink-0 p-2 sm:p-4 bg-white dark:bg-gray-800 shadow-md rounded-b-2xl">
+        <div class="flex items-center space-x-2 sm:space-x-4">
+            <!-- More Dropdown Menu -->
+            <div class="relative">
+                <button id="more-btn" class="p-2 bg-indigo-200 hover:bg-indigo-300 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-indigo-800 dark:text-indigo-200 rounded-full transition-all duration-200 transform hover:scale-110">
+                    <!-- Vertical ellipsis icon -->
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
+                </button>
+                <!-- Dropdown content -->
+                <div id="dropdown-menu" class="absolute left-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-indigo-200 dark:border-indigo-700 rounded-lg shadow-xl z-30 hidden animate-fade-in-down">
+                    <ul class="py-1">
+                        <li>
+                            <button id="history-menu-btn" class="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-indigo-100 dark:hover:bg-indigo-700 transition-colors duration-200">
+                                <!-- History icon -->
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                                History
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Address Bar with security icon -->
+            <div class="relative flex-grow flex items-center">
+                <i id="security-icon" class="fa-solid fa-lock absolute left-3 text-green-500"></i>
+                <input type="text" id="url-input" placeholder="Enter URL or search term..." value="https://www.google.com"
+                       class="flex-grow p-2 text-sm sm:text-base border border-indigo-300 dark:border-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded-full bg-indigo-50 dark:bg-gray-900 transition-all duration-200 pl-10">
+            </div>
+
+            <!-- Go Button -->
+            <button id="go-btn" class="p-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full shadow-lg transition-all duration-300 transform hover:scale-110">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Security Blocking Modal -->
+    <div id="security-modal" class="security-modal hidden">
+        <div class="bg-red-700 p-8 rounded-2xl shadow-2xl animate-fade-in-down">
+            <h2 class="text-4xl font-bold text-white mb-4">⚠️ THIS WEBSITE IS BLOCKED! ⚠️</h2>
+            <p class="text-xl text-white mb-6">This browser has identified this website as insecure and will not load it.</p>
+            <button id="understand-btn" class="py-3 px-8 bg-white text-red-700 font-bold rounded-full shadow-lg transition-all duration-300 transform hover:scale-105 hover:bg-gray-200">
+                I understand
+            </button>
+        </div>
+    </div>
+
+    <!-- Main browsing area (iframe) -->
+    <iframe id="web-frame" src="https://www.google.com" frameborder="0"
+            class="flex-grow w-full border-t border-indigo-200 dark:border-indigo-700"></iframe>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Get all the elements from the HTML
+            const urlInput = document.getElementById('url-input');
+            const goBtn = document.getElementById('go-btn');
+            const historyMenuBtn = document.getElementById('history-menu-btn');
+            const moreBtn = document.getElementById('more-btn');
+            const dropdownMenu = document.getElementById('dropdown-menu');
+            const webFrame = document.getElementById('web-frame');
+            const historyPanel = document.getElementById('history-panel');
+            const historyList = document.getElementById('history-list');
+            const backdrop = document.getElementById('backdrop');
+            const closeHistoryBtn = document.getElementById('close-history-btn');
+            const securityModal = document.getElementById('security-modal');
+            const understandBtn = document.getElementById('understand-btn');
+            const securityIcon = document.getElementById('security-icon');
+
+            // Custom history log to bypass the Same-Origin Policy limitations
+            let historyLog = [];
+            let historyIndex = -1;
+
+            // Function to add a URL to our custom history log
+            function addToHistory(url) {
+                // If we're not at the end of the history, we clear the "future" history
+                if (historyIndex < historyLog.length - 1) {
+                    historyLog = historyLog.slice(0, historyIndex + 1);
+                }
+                historyLog.push(url);
+                historyIndex++;
+                renderHistory();
+            }
+
+            // Function to update the security icon based on the URL
+            function updateSecurityIcon(url) {
+                if (url.startsWith('https://')) {
+                    securityIcon.className = 'fa-solid fa-lock absolute left-3 text-green-500';
+                } else {
+                    securityIcon.className = 'fa-solid fa-triangle-exclamation absolute left-3 text-red-500';
+                }
+            }
+
+            // Function to load a URL into the iframe and update history
+            function loadUrl(url) {
+                // Ensure the URL has a protocol, defaulting to https
+                let finalUrl = url;
+                if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    finalUrl = 'https://' + url;
+                }
+
+                // Update the icon first for immediate feedback
+                updateSecurityIcon(finalUrl);
+
+                // Check for security and block if needed
+                if (finalUrl.startsWith('http://')) {
+                    securityModal.classList.remove('hidden');
+                    securityModal.classList.add('open');
+                    webFrame.src = 'about:blank'; // Block the iframe from loading
+                } else {
+                    securityModal.classList.add('hidden');
+                    securityModal.classList.remove('open');
+                    webFrame.src = finalUrl;
+                    addToHistory(finalUrl); // Only add secure sites to history
+                }
+
+                urlInput.value = finalUrl;
+            }
+
+            // Function to handle the "Go" button click or Enter key press
+            function handleGo() {
+                const url = urlInput.value;
+                if (url) {
+                    // Check if it's a simple search term or a URL
+                    const isUrl = url.includes('.') && url.length > 3;
+                    if (isUrl) {
+                        loadUrl(url);
+                    } else {
+                        // Use Google Search for a search term
+                        const searchQuery = 'https://www.google.com/search?q=' + encodeURIComponent(url);
+                        loadUrl(searchQuery);
+                    }
+                }
+            }
+
+            // Function to delete a history item by index
+            function deleteHistoryItem(index) {
+                if (index > -1) {
+                    historyLog.splice(index, 1);
+                    // Adjust history index if the deleted item was before the current one
+                    if (index <= historyIndex) {
+                        historyIndex--;
+                    }
+                    if (historyLog.length === 0) {
+                        historyIndex = -1; // Reset to -1 if history is empty
+                    }
+                    renderHistory();
+                }
+            }
+
+            // Function to render the history list in the panel
+            function renderHistory() {
+                historyList.innerHTML = ''; // Clear existing list
+                historyLog.forEach((url, index) => {
+                    const listItem = document.createElement('li');
+                    listItem.className = "flex items-center justify-between group p-2 hover:bg-indigo-100 dark:hover:bg-indigo-700 rounded-lg transition-colors duration-200";
+
+                    const link = document.createElement('a');
+                    link.href = "#";
+                    link.textContent = url;
+                    link.className = "block flex-grow text-gray-700 dark:text-gray-200 truncate";
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        historyIndex = index;
+                        loadUrlFromHistory();
+                        closeHistoryPanel();
+                    });
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                    `;
+                    deleteBtn.className = "ml-2 p-1";
+                    deleteBtn.title = "Delete History Item";
+                    deleteBtn.addEventListener('click', () => {
+                        deleteHistoryItem(index);
+                    });
+
+                    listItem.appendChild(link);
+                    listItem.appendChild(deleteBtn);
+                    historyList.appendChild(listItem);
+                });
+            }
+
+            // Function to navigate based on the current history index
+            function loadUrlFromHistory() {
+                const url = historyLog[historyIndex];
+                if (url) {
+                    webFrame.src = url;
+                    urlInput.value = url;
+                    updateSecurityIcon(url);
+                }
+            }
+
+            // Function to open and close the history panel
+            function toggleHistoryPanel() {
+                historyPanel.classList.toggle('open');
+                backdrop.classList.toggle('open');
+            }
+
+            function closeHistoryPanel() {
+                 historyPanel.classList.remove('open');
+                 backdrop.classList.remove('open');
+            }
+
+            // Event listeners
+            goBtn.addEventListener('click', handleGo);
+
+            urlInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    handleGo();
+                }
+            });
+
+            // Dropdown button functionality
+            moreBtn.addEventListener('click', (event) => {
+                event.stopPropagation(); // Prevents the document click event from firing immediately
+                dropdownMenu.classList.toggle('hidden');
+            });
+
+            // Close the dropdown if the user clicks anywhere else on the page
+            document.addEventListener('click', (event) => {
+                if (!moreBtn.contains(event.target) && !dropdownMenu.contains(event.target)) {
+                    dropdownMenu.classList.add('hidden');
+                }
+            });
+
+            historyMenuBtn.addEventListener('click', () => {
+                toggleHistoryPanel();
+                dropdownMenu.classList.add('hidden');
+            });
+
+            closeHistoryBtn.addEventListener('click', closeHistoryPanel);
+
+            // The backdrop now requires a double-click to close
+            backdrop.addEventListener('dblclick', closeHistoryPanel);
+
+            // Event listener for the "I understand" button
+            understandBtn.addEventListener('click', () => {
+                // This clears the modal and returns the user to the previous page
+                securityModal.classList.remove('open');
+                securityModal.classList.add('hidden');
+                loadUrlFromHistory();
+            });
+
+            // Initial load and setup
+            loadUrl(urlInput.value);
+        });
+    </script>
+</body>
+</html>
